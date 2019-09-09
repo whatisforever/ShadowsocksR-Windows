@@ -1,15 +1,15 @@
-﻿using Shadowsocks.Controller;
-using Shadowsocks.Properties;
-using Shadowsocks.Util;
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using Shadowsocks.Controller;
+using Shadowsocks.Properties;
+using Shadowsocks.Util;
 
 namespace Shadowsocks.Encryption
 {
-    public class MbedTLS
+    public static class MbedTLS
     {
-        const string DLLNAME = "libsscrypto.dll";
+        const string DLLNAME = @"libsscrypto.dll";
 
         public const int MBEDTLS_ENCRYPT = 1;
         public const int MBEDTLS_DECRYPT = 0;
@@ -100,7 +100,7 @@ namespace Shadowsocks.Encryption
             return output;
         }
 
-        [DllImport("Kernel32.dll")]
+        [DllImport(@"Kernel32.dll")]
         private static extern IntPtr LoadLibrary(string path);
 
         [DllImport(DLLNAME, CallingConvention = CallingConvention.Cdecl)]
