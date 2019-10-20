@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -14,20 +13,29 @@ namespace Shadowsocks.Util
 
         public static readonly Dictionary<string, string> SupportLanguage = new Dictionary<string, string>
         {
-                {@"简体中文", @"zh-CN"},
-                {@"繁体中文", @"zh-TW"},
-                {@"English (United States)", @"en-US"},
+                {@"zh-CN", @"zh-CN"},
+                {@"zh", @"zh-CN"},
+                {@"zh-Hans", @"zh-CN"},
+                {@"zh-SG", @"zh-CN"},
+                {@"zh-Hant", @"zh-TW"},
+                {@"zh-HK", @"zh-TW"},
+                {@"zh-TW", @"zh-TW"},
+                {@"zh-MO", @"zh-TW"},
+                {@"en-US", @"en-US"}
         };
 
-        public static string GetLanguage(string name)
+        public static string GetLanguage(string langName = @"")
         {
-            return SupportLanguage.All(s => name != s.Value) ? GetLanguage() : name;
-        }
+            if (string.IsNullOrEmpty(langName))
+            {
+                langName = System.Globalization.CultureInfo.CurrentCulture.Name;
+            }
 
-        public static string GetLanguage()
-        {
-            var name = System.Globalization.CultureInfo.CurrentCulture.Name;
-            return SupportLanguage.Any(s => name == s.Value) ? name : DefaultLanguage;
+            if (SupportLanguage.TryGetValue(langName, out var res))
+            {
+                return res;
+            }
+            return DefaultLanguage;
         }
 
         public static void SetLanguage(string langName)
@@ -56,10 +64,7 @@ namespace Shadowsocks.Util
 
         public static void SetLanguage(ResourceDictionary resources, string filename, string langName = @"")
         {
-            if (string.IsNullOrEmpty(langName))
-            {
-                langName = GetLanguage();
-            }
+            langName = GetLanguage(string.IsNullOrEmpty(langName) ? CurrentLanguage : langName);
 
             var url = new Uri($@"../I18N/{filename}.{langName}.xaml", UriKind.Relative);
             if (resources.MergedDictionaries.Count > 0)

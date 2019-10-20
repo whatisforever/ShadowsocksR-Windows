@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -35,28 +35,34 @@
     <None Remove="Controls\NumberUpDown.xaml" />
     <None Remove="Resources\ssw128.png" />
     <None Remove="View\ConfigWindow.xaml" />
-    <None Remove="View\InputPasswordWindow.xaml" />
     <None Remove="View\LogWindow.xaml" />
     <None Remove="View\PortSettingsWindow.xaml" />
     <None Remove="View\QRCodeSplashWindow.xaml" />
-    <None Remove="View\ResetPassword.xaml" />
     <None Remove="View\ServerLogWindow.xaml" />
     <None Remove="View\ShowTextWindow.xaml" />
     <None Remove="View\SubscribeWindow.xaml" />
   </ItemGroup>
   
   <ItemGroup>
+    <Resource Include="..\pic\wechat.jpg" Link="Resources\wechat.jpg" />
+  </ItemGroup>
+  
+  <ItemGroup>
     <PackageReference Include="Costura.Fody" Version="4.1.0" Condition=" '$(SelfContained)' != 'true' " />
     <PackageReference Include="DnsClient" Version="1.2.0" />
-    <PackageReference Include="Fody" Version="6.0.0" Condition=" '$(SelfContained)' != 'true' ">
+    <PackageReference Include="Fody" Version="6.0.2" Condition=" '$(SelfContained)' != 'true' ">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.0.8" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
+    <PackageReference Include="Syncfusion.Licensing" Version="17.3.0.17" />
+    <PackageReference Include="Syncfusion.SfGrid.WPF" Version="17.3.0.17" />
+    <PackageReference Include="Syncfusion.Shared.WPF" Version="17.3.0.17" />
+    <PackageReference Include="Syncfusion.Tools.WPF" Version="17.3.0.17" />
     <PackageReference Include="System.Net.Http" Version="4.3.4" />
     <PackageReference Include="WpfColorFontDialog" Version="1.0.6" />
-    <PackageReference Include="ZXing.Net" Version="0.16.4" Condition=" '$(TargetFramework.StartsWith(netcoreapp))' != 'true' " />
+    <PackageReference Include="ZXing.Net" Version="0.16.5" Condition=" '$(TargetFramework.StartsWith(netcoreapp))' != 'true' " />
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.6" Condition=" '$(TargetFramework.StartsWith(netcoreapp))' == 'true' " />
   </ItemGroup>
 
@@ -66,6 +72,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Controller\SystemProxy\" />
     <Folder Include="Util\SingleInstance\" />
   </ItemGroup>
 
@@ -85,6 +92,42 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Page Update="I18N\SettingsWindow.en-US.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\SettingsWindow.zh-CN.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\SettingsWindow.zh-TW.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\PortSettingsWindow.en-US.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\PortSettingsWindow.zh-CN.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\PortSettingsWindow.zh-TW.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\ServerLogWindow.en-US.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\ServerLogWindow.zh-CN.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\ServerLogWindow.zh-TW.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\LogWindow.en-US.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\LogWindow.zh-CN.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="I18N\LogWindow.zh-TW.xaml">
+      <SubType>Designer</SubType>
+    </Page>
     <Page Update="I18N\SubscribeWindow.en-US.xaml">
       <SubType>Designer</SubType>
     </Page>
@@ -104,5 +147,13 @@
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="cd &quot;$(ProjectDir)&quot;&#xD;&#xA;&#xD;&#xA;SyncfusionLicenseRegister.bat PreBuild Program.cs" />
+  </Target>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="cd &quot;$(ProjectDir)&quot;&#xD;&#xA;&#xD;&#xA;SyncfusionLicenseRegister.bat PostBuild Program.cs" />
+  </Target>
 
 </Project>

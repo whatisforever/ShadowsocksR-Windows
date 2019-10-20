@@ -1,4 +1,5 @@
 ﻿using Shadowsocks.Controller;
+using Shadowsocks.Controller.HttpRequest;
 using Shadowsocks.Controls;
 using Shadowsocks.Model;
 using Shadowsocks.Util;
@@ -14,13 +15,15 @@ namespace Shadowsocks.View
         public SettingsWindow(ShadowsocksController controller)
         {
             InitializeComponent();
+            I18NUtil.SetLanguage(Resources, @"SettingsWindow");
             Closed += (o, e) => { _controller.ConfigChanged -= controller_ConfigChanged; };
             _controller = controller;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs _)
         {
-            LoadLanguage();
+            UpdateTitle();
+            LoadItems();
             _controller.ConfigChanged += controller_ConfigChanged;
             foreach (var c in ViewUtils.FindVisualChildren<TextBox>(this))
             {
@@ -61,52 +64,23 @@ namespace Shadowsocks.View
 
         private readonly ShadowsocksController _controller;
         private Configuration _modifiedConfiguration;
-        private readonly Dictionary<int, string> _balanceIndexMap = new Dictionary<int, string>();
+        private readonly List<string> _balanceIndexMap = new List<string>();
 
         private void UpdateTitle()
         {
-            Title = $@"{I18N.GetString(@"Global Settings")}({(_controller.GetCurrentConfiguration().shareOverLan ? I18N.GetString(@"Any") : I18N.GetString(@"Local"))}:{_controller.GetCurrentConfiguration().localPort} {I18N.GetString(@"Version")}:{UpdateChecker.FullVersion})";
+            Title = $@"{this.GetWindowStringValue(@"Title")}({(_controller.GetCurrentConfiguration().shareOverLan ? this.GetWindowStringValue(@"Any") : this.GetWindowStringValue(@"Local"))}:{_controller.GetCurrentConfiguration().localPort} {this.GetWindowStringValue(@"Version")}:{UpdateChecker.FullVersion})";
         }
 
-        private void LoadLanguage()
+        private void LoadItems()
         {
-            UpdateTitle();
-
-            foreach (var c in ViewUtils.FindVisualChildren<Label>(this))
+            ProxyTypeComboBox.Items.Add(this.GetWindowStringValue(@"Socks5"));
+            ProxyTypeComboBox.Items.Add(this.GetWindowStringValue(@"Http"));
+            ProxyTypeComboBox.Items.Add(this.GetWindowStringValue(@"TcpPortTunnel"));
+            foreach (var value in Enum.GetValues(typeof(LoadBalance)))
             {
-                c.Content = I18N.GetString(c.Content.ToString());
-            }
-
-            foreach (var c in ViewUtils.FindVisualChildren<Button>(this))
-            {
-                c.Content = I18N.GetString(c.Content.ToString());
-            }
-
-            foreach (var c in ViewUtils.FindVisualChildren<CheckBox>(this))
-            {
-                c.Content = I18N.GetString(c.Content.ToString());
-            }
-
-            foreach (var c in ViewUtils.FindVisualChildren<GroupBox>(this))
-            {
-                c.Header = I18N.GetString(c.Header.ToString());
-            }
-
-            ProxyTypeComboBox.Items.Add(I18N.GetString(@"Socks5(support UDP)"));
-            ProxyTypeComboBox.Items.Add(I18N.GetString(@"Http tunnel"));
-            ProxyTypeComboBox.Items.Add(I18N.GetString(@"TCP Port tunnel"));
-            BalanceComboBox.Items.Add(@"OneByOne");
-            BalanceComboBox.Items.Add(@"Random");
-            BalanceComboBox.Items.Add(@"FastDownloadSpeed");
-            BalanceComboBox.Items.Add(@"LowLatency");
-            BalanceComboBox.Items.Add(@"LowException");
-            BalanceComboBox.Items.Add(@"SelectedFirst");
-            BalanceComboBox.Items.Add(@"Timer");
-            for (var i = 0; i < BalanceComboBox.Items.Count; ++i)
-            {
-                var str = BalanceComboBox.Items[i].ToString();
-                _balanceIndexMap[i] = str;
-                BalanceComboBox.Items[i] = I18N.GetString(str);
+                var str = value.ToString();
+                _balanceIndexMap.Add(str);
+                BalanceComboBox.Items.Add(I18NUtil.GetAppStringValue(str));
             }
         }
 
@@ -121,14 +95,14 @@ namespace Shadowsocks.View
 
                 if (AutoStartupCheckBox.IsChecked != AutoStartup.Check() && !AutoStartup.Set(AutoStartupCheckBox.IsChecked.GetValueOrDefault()))
                 {
-                    MessageBox.Show(I18N.GetString(@"Failed to update registry"));
+                    MessageBox.Show(this.GetWindowStringValue(@"FailAutoStartUp"));
                 }
 
                 _modifiedConfiguration.random = BalanceCheckBox.IsChecked.GetValueOrDefault();
                 _modifiedConfiguration.balanceAlgorithm = BalanceComboBox.SelectedIndex >= 0 &&
                                                           BalanceComboBox.SelectedIndex < _balanceIndexMap.Count
                         ? _balanceIndexMap[BalanceComboBox.SelectedIndex]
-                        : @"LowException";
+                        : LoadBalance.LowException.ToString();
                 _modifiedConfiguration.randomInGroup = BalanceInGroupCheckBox.IsChecked.GetValueOrDefault();
                 _modifiedConfiguration.TTL = TtlNumber.NumValue;
                 _modifiedConfiguration.connectTimeout = TimeoutNumber.NumValue;

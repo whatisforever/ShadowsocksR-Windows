@@ -1,4 +1,6 @@
 ﻿using Shadowsocks.Controller;
+using Shadowsocks.Controller.HttpRequest;
+using Shadowsocks.Controller.Service;
 using Shadowsocks.Model;
 using Shadowsocks.Util;
 using Shadowsocks.ViewModel;
@@ -12,7 +14,7 @@ namespace Shadowsocks.View
 {
     public partial class SubscribeWindow
     {
-        public SubscribeWindow(ShadowsocksController controller, UpdateSubscribeManager updateSubscribeManager, UpdateFreeNode updateFreeNodeChecker)
+        public SubscribeWindow(ShadowsocksController controller, UpdateSubscribeManager updateSubscribeManager, UpdateNode updateNodeChecker)
         {
             InitializeComponent();
             I18NUtil.SetLanguage(Resources, @"SubscribeWindow");
@@ -23,7 +25,7 @@ namespace Shadowsocks.View
             };
             _controller = controller;
             _updateSubscribeManager = updateSubscribeManager;
-            _updateFreeNodeChecker = updateFreeNodeChecker;
+            _updateNodeChecker = updateNodeChecker;
             _controller.ConfigChanged += controller_ConfigChanged;
             LoadCurrentConfiguration();
             SubscribeWindowViewModel.SubscribesChanged += SubscribeWindowViewModel_SubscribesChanged;
@@ -35,7 +37,7 @@ namespace Shadowsocks.View
         }
 
         private readonly ShadowsocksController _controller;
-        private readonly UpdateFreeNode _updateFreeNodeChecker;
+        private readonly UpdateNode _updateNodeChecker;
         private readonly UpdateSubscribeManager _updateSubscribeManager;
         private Configuration _modifiedConfiguration;
 
@@ -68,7 +70,7 @@ namespace Shadowsocks.View
         {
             _modifiedConfiguration.configs.RemoveAll(server =>
                     !string.IsNullOrEmpty(server.SubTag)
-                    && _modifiedConfiguration.serverSubscribes.All(subscribe => subscribe.Group != server.SubTag));
+                    && _modifiedConfiguration.serverSubscribes.All(subscribe => subscribe.Tag != server.SubTag));
         }
 
         private bool SaveConfig()
@@ -76,18 +78,18 @@ namespace Shadowsocks.View
             var remarks = new HashSet<string>();
             foreach (var serverSubscribe in SubscribeWindowViewModel.SubscribeCollection)
             {
-                if (remarks.Contains(serverSubscribe.Group))
+                if (remarks.Contains(serverSubscribe.Tag))
                 {
                     return false;
                 }
-                remarks.Add(serverSubscribe.Group);
+                remarks.Add(serverSubscribe.Tag);
             }
             _modifiedConfiguration.serverSubscribes.Clear();
             _modifiedConfiguration.serverSubscribes.AddRange(SubscribeWindowViewModel.SubscribeCollection);
 
             if (_modifiedConfiguration.configs.Any(server =>
             !string.IsNullOrEmpty(server.SubTag)
-            && _modifiedConfiguration.serverSubscribes.All(subscribe => subscribe.Group != server.SubTag)))
+            && _modifiedConfiguration.serverSubscribes.All(subscribe => subscribe.Tag != server.SubTag)))
             {
                 if (MessageBox.Show(this.GetWindowStringValue(@"SaveQuestion"),
                         UpdateChecker.Name, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes)
@@ -153,7 +155,7 @@ namespace Shadowsocks.View
             var index = ServerSubscribeListBox.SelectedIndex;
             if (ServerSubscribeListBox.SelectedItem is ServerSubscribe serverSubscribe)
             {
-                var tag = serverSubscribe.Group;
+                var tag = serverSubscribe.Tag;
                 _modifiedConfiguration.configs = _modifiedConfiguration.configs.Where(server => server.SubTag != tag).ToList();
                 SubscribeWindowViewModel.SubscribeCollection.Remove(serverSubscribe);
             }
@@ -203,23 +205,7 @@ namespace Shadowsocks.View
                 if (Save())
                 {
                     ApplyButton.IsEnabled = false;
-                    _updateSubscribeManager.CreateTask(_modifiedConfiguration, _updateFreeNodeChecker, true, true, serverSubscribe);
-                }
-                else
-                {
-                    SaveError();
-                }
-            }
-        }
-
-        private void UpdateBypassProxyButton_OnClick(object sender, RoutedEventArgs e)
-        {
-            if (ServerSubscribeListBox.SelectedItem is ServerSubscribe serverSubscribe)
-            {
-                if (Save())
-                {
-                    ApplyButton.IsEnabled = false;
-                    _updateSubscribeManager.CreateTask(_modifiedConfiguration, _updateFreeNodeChecker, false, true, serverSubscribe);
+                    _updateSubscribeManager.CreateTask(_modifiedConfiguration, _updateNodeChecker, true, serverSubscribe);
                 }
                 else
                 {

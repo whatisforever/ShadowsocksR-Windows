@@ -10,7 +10,7 @@ namespace Shadowsocks.Controls
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            if (value is double percent)
+            if (value is double percent && percent > 0)
             {
                 return new SolidColorBrush(ColorConvert.GetErrorPercentColor(percent));
             }

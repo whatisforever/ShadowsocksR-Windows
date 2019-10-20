@@ -1,5 +1,5 @@
 ﻿using Newtonsoft.Json;
-using Shadowsocks.Controller;
+using Shadowsocks.Controller.HttpRequest;
 using Shadowsocks.Encryption;
 using Shadowsocks.ViewModel;
 using System;
@@ -11,13 +11,13 @@ namespace Shadowsocks.Model
     public class ServerSubscribe : ViewModelBase
     {
         private string url;
-        private string group;
+        private string tag;
         private ulong lastUpdateTime;
         private bool autoCheckUpdate;
 
         public ServerSubscribe()
         {
-            url = UpdateFreeNode.DefaultUpdateUrl;
+            url = UpdateNode.DefaultUpdateUrl;
             autoCheckUpdate = true;
         }
 
@@ -35,24 +35,24 @@ namespace Shadowsocks.Model
         }
 
         [JsonIgnore]
-        public string OriginGroup => group;
+        public string OriginTag => tag;
 
         [JsonIgnore]
         public string UrlMd5 => BitConverter.ToString(MbedTLS.MD5(Encoding.UTF8.GetBytes(Url))).Replace(@"-", string.Empty);
 
-        public string Group
+        public string Tag
         {
-            get => string.IsNullOrWhiteSpace(group) ? UrlMd5 : group;
+            get => string.IsNullOrWhiteSpace(tag) ? UrlMd5 : tag;
             set
             {
                 if (UrlMd5 == value)
                 {
-                    group = string.Empty;
+                    tag = string.Empty;
                     OnPropertyChanged();
                 }
-                else if (group != value)
+                else if (tag != value)
                 {
-                    group = value;
+                    tag = value;
                     OnPropertyChanged();
                 }
             }

@@ -10,7 +10,7 @@ namespace Shadowsocks.Controls
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         {
-            if (value is long bytes)
+            if (value is long bytes && bytes > 0)
             {
                 return new SolidColorBrush(ColorConvert.GetConnectErrorColor(bytes));
             }

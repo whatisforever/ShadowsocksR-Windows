@@ -73,10 +73,7 @@ namespace Shadowsocks.Model
         }
 
         [JsonIgnore]
-        public string GroupName => string.IsNullOrEmpty(Group) ? @"(empty group)" : Group;
-
-        [JsonIgnore]
-        public string RemarkName => string.IsNullOrEmpty(Remarks) ? @"(empty remark)" : Remarks;
+        public string GroupName => string.IsNullOrEmpty(Group) ? I18NUtil.GetAppStringValue(@"EmptyGroup") : Group;
 
         [JsonIgnore]
         public string Remarks
@@ -354,7 +351,6 @@ namespace Shadowsocks.Model
                     remarks_base64 = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(Remarks));
-                    OnPropertyChanged(nameof(RemarkName));
                     OnPropertyChanged(nameof(FriendlyName));
                 }
             }
@@ -471,16 +467,12 @@ namespace Shadowsocks.Model
             ObfsParam = @"";
             Password = @"0";
             Remarks_Base64 = @"";
-            Group = @"FreeSSR-public";
+            Group = @"Default Group";
             SubTag = @"";
             UdpOverTcp = false;
             Enable = true;
-            var randId = new byte[16];
-            Utils.RandBytes(randId, randId.Length);
-            Id = BitConverter.ToString(randId).Replace(@"-", @"");
-
+            Id = Rng.RandId();
             SpeedLog = new ServerSpeedLog();
-
             Index = 0;
             IsSelected = false;
         }
@@ -552,21 +544,21 @@ namespace Shadowsocks.Model
             Method = match.Groups[4].Value;
             obfs = match.Groups[5].Value.Length == 0 ? "plain" : match.Groups[5].Value;
             obfs = obfs.Replace("_compatible", "");
-            Password = Base64.DecodeStandardSSRUrlSafeBase64(match.Groups[6].Value);
+            Password = Base64.DecodeUrlSafeBase64(match.Groups[6].Value);
 
             if (params_dict.ContainsKey("protoparam"))
             {
-                ProtocolParam = Base64.DecodeStandardSSRUrlSafeBase64(params_dict["protoparam"]);
+                ProtocolParam = Base64.DecodeUrlSafeBase64(params_dict["protoparam"]);
             }
             if (params_dict.ContainsKey("obfsparam"))
             {
-                ObfsParam = Base64.DecodeStandardSSRUrlSafeBase64(params_dict["obfsparam"]);
+                ObfsParam = Base64.DecodeUrlSafeBase64(params_dict["obfsparam"]);
             }
             if (params_dict.ContainsKey("remarks"))
             {
-                Remarks = Base64.DecodeStandardSSRUrlSafeBase64(params_dict["remarks"]);
+                Remarks = Base64.DecodeUrlSafeBase64(params_dict["remarks"]);
             }
-            Group = params_dict.ContainsKey("group") ? Base64.DecodeStandardSSRUrlSafeBase64(params_dict["group"]) : string.Empty;
+            Group = params_dict.ContainsKey("group") ? Base64.DecodeUrlSafeBase64(params_dict["group"]) : string.Empty;
 
             if (params_dict.ContainsKey("uot"))
             {
@@ -628,8 +620,7 @@ namespace Shadowsocks.Model
 
         private string GetSsrLink()
         {
-            var mainPart =
-                    $@"{server}:{Server_Port}:{Protocol}:{Method}:{obfs}:{Base64.EncodeUrlSafeBase64(Password)}";
+            var mainPart = $@"{server}:{Server_Port}:{Protocol}:{Method}:{obfs}:{Base64.EncodeUrlSafeBase64(Password)}";
             var paramStr = $@"obfsparam={Base64.EncodeUrlSafeBase64(ObfsParam ?? string.Empty)}";
             if (!string.IsNullOrEmpty(ProtocolParam))
             {
@@ -665,9 +656,12 @@ namespace Shadowsocks.Model
         protected override void OnPropertyChanged(string propertyName = null)
         {
             base.OnPropertyChanged(propertyName);
-            base.OnPropertyChanged(nameof(SsLink));
-            base.OnPropertyChanged(nameof(SsrLink));
-            ServerChanged?.Invoke(this, new EventArgs());
+            if (propertyName == null)
+            {
+                base.OnPropertyChanged(nameof(SsLink));
+                base.OnPropertyChanged(nameof(SsrLink));
+                ServerChanged?.Invoke(this, new EventArgs());
+            }
         }
     }
 }
