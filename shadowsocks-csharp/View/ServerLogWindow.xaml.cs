@@ -18,7 +18,7 @@ namespace Shadowsocks.View
 {
     public partial class ServerLogWindow
     {
-        public ServerLogWindow(ShadowsocksController controller, WindowStatus status)
+        public ServerLogWindow(MainController controller, WindowStatus status)
         {
             InitializeComponent();
             I18NUtil.SetLanguage(Resources, @"ServerLogWindow");
@@ -70,16 +70,16 @@ namespace Shadowsocks.View
         {
             UpdateTitle();
             ServerDataGrid.View?.BeginInit();
-            ServerLogViewModel.ReadConfig(_controller);
+            ServerLogViewModel.ReadConfig();
             ServerDataGrid.View?.EndInit();
 
-            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            Dispatcher.CurrentDispatcher.InvokeAsync(() =>
             {
                 if (isFirstLoad && ServerLogViewModel.SelectedServer != null)
                 {
                     ServerDataGrid.ScrollInView(new RowColumnIndex(ServerLogViewModel.SelectedServer.Index, 2));
                 }
-            }));
+            }, DispatcherPriority.Input);
         }
 
         private void controller_ConfigChanged(object sender, EventArgs e)
@@ -87,12 +87,12 @@ namespace Shadowsocks.View
             LoadConfig(false);
         }
 
-        private readonly ShadowsocksController _controller;
+        private readonly MainController _controller;
         public ServerLogViewModel ServerLogViewModel { get; set; } = new ServerLogViewModel();
 
         private void UpdateTitle()
         {
-            Title = $@"{this.GetWindowStringValue(@"Title")}({(_controller.GetCurrentConfiguration().shareOverLan ? this.GetWindowStringValue(@"Any") : this.GetWindowStringValue(@"Local"))}:{_controller.GetCurrentConfiguration().localPort} {this.GetWindowStringValue(@"Version")}{UpdateChecker.FullVersion})";
+            Title = $@"{this.GetWindowStringValue(@"Title")}({(Global.GuiConfig.ShareOverLan ? this.GetWindowStringValue(@"Any") : this.GetWindowStringValue(@"Local"))}:{Global.GuiConfig.LocalPort} {this.GetWindowStringValue(@"Version")}{UpdateChecker.FullVersion})";
         }
 
         private void AlwaysTopMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -115,19 +115,19 @@ namespace Shadowsocks.View
 
         private void DisconnectDirectMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            Server.GetForwardServerRef().GetConnections().CloseAll();
+            Server.ForwardServer.Connections.CloseAll();
         }
 
         private void DisconnectAllMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
             _controller.DisconnectAllConnections();
-            Server.GetForwardServerRef().GetConnections().CloseAll();
+            Server.ForwardServer.Connections.CloseAll();
         }
 
         private void ClearMaxMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            foreach (var server in config.configs)
+            var config = Global.GuiConfig;
+            foreach (var server in config.Configs)
             {
                 server.SpeedLog.ClearMaxSpeed();
             }
@@ -135,8 +135,8 @@ namespace Shadowsocks.View
 
         private void ClearAllMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            foreach (var server in config.configs)
+            var config = Global.GuiConfig;
+            foreach (var server in config.Configs)
             {
                 server.SpeedLog.Clear();
             }
@@ -144,12 +144,12 @@ namespace Shadowsocks.View
 
         private void ClearSelectedTotalMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            if (config.index >= 0 && config.index < config.configs.Count)
+            var config = Global.GuiConfig;
+            if (config.Index >= 0 && config.Index < config.Configs.Count)
             {
                 try
                 {
-                    _controller.ClearTransferTotal(config.configs[config.index].server);
+                    _controller.ClearTransferTotal(config.Configs[config.Index].Id);
                 }
                 catch
                 {
@@ -160,45 +160,45 @@ namespace Shadowsocks.View
 
         private void ClearTotalMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            foreach (var server in config.configs)
+            var config = Global.GuiConfig;
+            foreach (var server in config.Configs)
             {
-                _controller.ClearTransferTotal(server.server);
+                _controller.ClearTransferTotal(server.Id);
             }
         }
 
         private void CopyCurrentLinkMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            if (config.index >= 0 && config.index < config.configs.Count)
+            var config = Global.GuiConfig;
+            if (config.Index >= 0 && config.Index < config.Configs.Count)
             {
-                var link = config.configs[config.index].SsrLink;
+                var link = config.Configs[config.Index].SsrLink;
                 Clipboard.SetDataObject(link);
             }
         }
 
         private void CopyCurrentGroupLinksMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            if (config.index >= 0 && config.index < config.configs.Count)
+            var config = Global.GuiConfig;
+            if (config.Index >= 0 && config.Index < config.Configs.Count)
             {
-                var group = config.configs[config.index].Group;
-                var link = config.configs.Where(t => t.Group == group).Aggregate(string.Empty, (current, t) => current + $@"{t.SsrLink}{Environment.NewLine}");
+                var group = config.Configs[config.Index].Group;
+                var link = config.Configs.Where(t => t.Group == group).Aggregate(string.Empty, (current, t) => current + $@"{t.SsrLink}{Environment.NewLine}");
                 Clipboard.SetDataObject(link);
             }
         }
 
         private void CopyAllEnableLinksMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            var link = config.configs.Where(t => t.Enable).Aggregate(string.Empty, (current, t) => current + $@"{t.SsrLink}{Environment.NewLine}");
+            var config = Global.GuiConfig;
+            var link = config.Configs.Where(t => t.Enable).Aggregate(string.Empty, (current, t) => current + $@"{t.SsrLink}{Environment.NewLine}");
             Clipboard.SetDataObject(link);
         }
 
         private void CopyAllLinksMenuItem_OnClick(object sender, RoutedEventArgs e)
         {
-            var config = _controller.GetCurrentConfiguration();
-            var link = config.configs.Aggregate(string.Empty, (current, t) => current + $@"{t.SsrLink}{Environment.NewLine}");
+            var config = Global.GuiConfig;
+            var link = config.Configs.Aggregate(string.Empty, (current, t) => current + $@"{t.SsrLink}{Environment.NewLine}");
             Clipboard.SetDataObject(link);
         }
 
@@ -215,12 +215,7 @@ namespace Shadowsocks.View
                 var mappingName = ServerDataGrid.CurrentColumn.MappingName;
                 if (mappingName == Resources[@"ServerMappingName"].ToString())
                 {
-                    var config = _controller.GetCurrentConfiguration();
-                    Console.WriteLine($@"config.checkSwitchAutoCloseAll:{config.checkSwitchAutoCloseAll}");
-                    if (config.checkSwitchAutoCloseAll)
-                    {
-                        _controller.DisconnectAllConnections();
-                    }
+                    _controller.DisconnectAllConnections(true);
                     _controller.SelectServerIndex(index);
                 }
                 else if (mappingName == Resources[@"GroupMappingName"].ToString())
@@ -236,9 +231,15 @@ namespace Shadowsocks.View
                                 sameGroupServer.Enable = enable;
                             }
                         }
-                        _controller.Save();
+                        Global.SaveConfig();
                     }
                 }
+                else
+                {
+                    return;
+                }
+                ServerDataGrid.ClearSelections(false);
+                ServerDataGrid.SelectCell(server, ServerDataGrid.Columns[0]);
             }
         }
 
@@ -259,7 +260,7 @@ namespace Shadowsocks.View
                 }
                 else if (mappingName == Resources[@"ConnectingMappingName"].ToString())
                 {
-                    server.GetConnections().CloseAll();
+                    server.Connections.CloseAll();
                 }
                 else if (mappingName == Resources[@"MaxDownSpeedMappingName"].ToString()
                         || mappingName == Resources[@"MaxUpSpeedMappingName"].ToString())
@@ -339,7 +340,7 @@ namespace Shadowsocks.View
                 if (entry.IsRecords && entry is RecordEntry recordEntry && recordEntry.Data is Server server)
                 {
                     server.Enable = !server.Enable;
-                    _controller.Save();
+                    Global.SaveConfig();
                 }
             }
         }

@@ -1,4 +1,5 @@
-﻿using Shadowsocks.Model;
+﻿using Shadowsocks.Enums;
+using Shadowsocks.Model;
 using System;
 using System.Net;
 
@@ -19,10 +20,10 @@ namespace Shadowsocks.Controller.HttpRequest
             Notify = notify;
             try
             {
-                var proxy = UpdateChecker.CreateProxy(config);
+                var proxy = CreateProxy(config);
                 SubscribeTask = subscribeTask;
                 var url = subscribeTask.Url ?? DefaultUpdateUrl;
-                Update(proxy, config.connectTimeout * 1000, url, config.proxyUserAgent);
+                Update(subscribeTask.ProxyType, proxy, config.ConnectTimeout * 1000, url, config.ProxyUserAgent);
             }
             catch (Exception e)
             {
@@ -30,11 +31,18 @@ namespace Shadowsocks.Controller.HttpRequest
             }
         }
 
-        private async void Update(IWebProxy proxy, int timeout, string url, string userAgent)
+        private async void Update(HttpRequestProxyType proxyType, IWebProxy proxy, int timeout, string url, string userAgent)
         {
             try
             {
-                FreeNodeResult = await AutoGetAsync(url, proxy, userAgent, timeout);
+                FreeNodeResult = proxyType switch
+                {
+                    HttpRequestProxyType.Auto => await AutoGetAsync(url, proxy, userAgent, timeout),
+                    HttpRequestProxyType.Direct => await DirectGetAsync(url, userAgent, timeout),
+                    HttpRequestProxyType.Proxy => await ProxyGetAsync(url, proxy, userAgent, timeout),
+                    HttpRequestProxyType.SystemSetting => await DefaultGetAsync(url, userAgent, timeout),
+                    _ => await AutoGetAsync(url, proxy, userAgent, timeout)
+                };
             }
             catch (Exception ex)
             {

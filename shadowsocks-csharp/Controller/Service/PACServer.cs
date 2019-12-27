@@ -1,9 +1,11 @@
-﻿using Shadowsocks.Model;
+﻿using Shadowsocks.Controller.HttpRequest;
+using Shadowsocks.Model;
 using Shadowsocks.Util;
 using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Shadowsocks.Enums;
 
 namespace Shadowsocks.Controller.Service
 {
@@ -31,7 +33,7 @@ namespace Shadowsocks.Controller.Service
         {
             _config = config;
             //Lots of software do not support ipv6 pac url yet
-            PacUrl = $@"http://{IPAddress.Loopback}:{config.localPort}/{ResourceName}?t={Utils.GetTimestamp(DateTime.Now)}";
+            PacUrl = $@"http://{IPAddress.Loopback}:{config.LocalPort}/{ResourceName}?t={Utils.GetTimestamp(DateTime.Now)}";
         }
 
         public override bool Handle(byte[] firstPacket, int length, Socket socket)
@@ -140,15 +142,15 @@ namespace Shadowsocks.Controller.Service
                     socksType == 4 ? $@"SOCKS {setProxy}" :
                     $@"PROXY {setProxy}";
 
-                if (_config.pacDirectGoProxy && _config.proxyEnable)
+                if (_config.PacDirectGoProxy && _config.ProxyEnable)
                 {
-                    if (_config.proxyType == 0)
+                    if (_config.ProxyType == ProxyType.Socks5)
                     {
-                        pac = pac.Replace(@"__DIRECT__", $@"SOCKS5 {_config.proxyHost}:{_config.proxyPort};DIRECT;");
+                        pac = pac.Replace(@"__DIRECT__", $@"SOCKS5 {_config.ProxyHost}:{_config.ProxyPort};DIRECT;");
                     }
-                    else if (_config.proxyType == 1)
+                    else if (_config.ProxyType == ProxyType.Http)
                     {
-                        pac = pac.Replace(@"__DIRECT__", $@"PROXY {_config.proxyHost}:{_config.proxyPort};DIRECT;");
+                        pac = pac.Replace(@"__DIRECT__", $@"PROXY {_config.ProxyHost}:{_config.ProxyPort};DIRECT;");
                     }
                 }
                 else
@@ -158,8 +160,9 @@ namespace Shadowsocks.Controller.Service
 
                 pac = pac.Replace(@"__PROXY__", $@"{proxy}DIRECT;");
 
-                var text = $@"HTTP/1.1 200 OK
-Server: ShadowsocksR
+                var text =
+$@"HTTP/1.1 200 OK
+Server: {UpdateChecker.Name}/{UpdateChecker.Version}
 Content-Type: application/x-ns-proxy-autoconfig
 Content-Length: {Encoding.UTF8.GetBytes(pac).Length}
 Connection: Close
@@ -198,9 +201,9 @@ Connection: Close
                     : $@"{localEndPoint.Address}";
             return socksType switch
             {
-                5 => $@"SOCKS5 {localhost}:{_config.localPort};",
-                4 => $@"SOCKS {localhost}:{_config.localPort};",
-                _ => $@"PROXY {localhost}:{_config.localPort};"
+                5 => $@"SOCKS5 {localhost}:{_config.LocalPort};",
+                4 => $@"SOCKS {localhost}:{_config.LocalPort};",
+                _ => $@"PROXY {localhost}:{_config.LocalPort};"
             };
         }
     }

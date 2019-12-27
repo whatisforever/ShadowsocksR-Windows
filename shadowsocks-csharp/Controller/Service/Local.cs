@@ -1,4 +1,5 @@
 ﻿using Shadowsocks.Model;
+using Shadowsocks.Model.Transfer;
 using Shadowsocks.Proxy;
 using System.Diagnostics;
 using System.Net;
@@ -48,7 +49,7 @@ namespace Shadowsocks.Controller.Service
 
         public override bool Handle(byte[] firstPacket, int length, Socket socket)
         {
-            if (!_config.GetPortMapCache().ContainsKey(((IPEndPoint)socket.LocalEndPoint).Port) && !Accept(firstPacket, length))
+            if (!_config.PortMapCache.ContainsKey(((IPEndPoint)socket.LocalEndPoint).Port) && !Accept(firstPacket, length))
             {
                 return false;
             }

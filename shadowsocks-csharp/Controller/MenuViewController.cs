@@ -2,14 +2,13 @@
 using Microsoft.Win32;
 using Shadowsocks.Controller.HttpRequest;
 using Shadowsocks.Controller.Service;
+using Shadowsocks.Enums;
 using Shadowsocks.Model;
 using Shadowsocks.Properties;
 using Shadowsocks.Util;
 using Shadowsocks.View;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -17,6 +16,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Shapes;
+using Brushes = System.Windows.Media.Brushes;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace Shadowsocks.Controller
 {
@@ -24,8 +26,8 @@ namespace Shadowsocks.Controller
     {
         private class EventParams
         {
-            public object sender;
-            public EventArgs e;
+            public readonly object sender;
+            public readonly EventArgs e;
 
             public EventParams(object sender, EventArgs e)
             {
@@ -38,10 +40,8 @@ namespace Shadowsocks.Controller
         // when config form is closed, it moves away from RAM
         // and it should just do anything related to the config form
 
-        private readonly ShadowsocksController controller;
+        private readonly MainController controller;
         private readonly UpdateChecker updateChecker;
-        private readonly UpdateNode _updateNodeChecker;
-        private readonly UpdateSubscribeManager updateSubscribeManager;
 
         private readonly TaskbarIcon _notifyIcon;
         private ContextMenu _contextMenu;
@@ -61,11 +61,14 @@ namespace Shadowsocks.Controller
         private MenuItem ServersItem;
         private MenuItem SelectRandomItem;
         private MenuItem sameHostForSameTargetItem;
+        private MenuItem _moreMenu;
+        private MenuItem _updateMenu;
         private MenuItem UpdateItem;
         private MenuItem AutoCheckUpdateItem;
         private MenuItem AllowPreReleaseItem;
-        private ConfigWindow _configWindow;
+        private ServerConfigWindow _serverConfigWindow;
         private SettingsWindow _settingsWindow;
+        private DnsSettingWindow _dnsSettingsWindow;
 
         #region ServerLogWindow
 
@@ -83,20 +86,17 @@ namespace Shadowsocks.Controller
         private bool configFrom_open;
         private readonly List<EventParams> eventList = new List<EventParams>();
 
-        public MenuViewController(ShadowsocksController controller)
+        public MenuViewController(MainController controller)
         {
             this.controller = controller;
 
             LoadMenu();
 
-            controller.ToggleModeChanged += controller_ToggleModeChanged;
-            controller.ToggleRuleModeChanged += controller_ToggleRuleModeChanged;
             controller.ConfigChanged += controller_ConfigChanged;
             controller.PACFileReadyToOpen += controller_FileReadyToOpen;
             controller.UserRuleFileReadyToOpen += controller_FileReadyToOpen;
             controller.Errored += ControllerError;
             controller.UpdatePACFromGFWListCompleted += controller_UpdatePACFromGFWListCompleted;
-            controller.UpdatePACFromChnDomainsAndIPCompleted += controller_UpdatePACFromChnDomainsAndIPCompleted;
             controller.UpdatePACFromGFWListError += controller_UpdatePACFromGFWListError;
             controller.ShowConfigFormEvent += Config_Click;
             controller.ShowSubscribeWindowEvent += Controller_ShowSubscribeWindowEvent;
@@ -115,10 +115,10 @@ namespace Shadowsocks.Controller
             updateChecker.NewVersionNotFound += updateChecker_NewVersionNotFound;
             updateChecker.NewVersionFoundFailed += UpdateChecker_NewVersionFoundFailed;
 
-            _updateNodeChecker = new UpdateNode();
-            _updateNodeChecker.NewFreeNodeFound += UpdateNodeCheckerNewNodeFound;
+            Global.UpdateNodeChecker = new UpdateNode();
+            Global.UpdateNodeChecker.NewFreeNodeFound += UpdateNodeCheckerNewNodeFound;
 
-            updateSubscribeManager = new UpdateSubscribeManager();
+            Global.UpdateSubscribeManager = new UpdateSubscribeManager();
 
             LoadCurrentConfiguration();
 
@@ -129,15 +129,15 @@ namespace Shadowsocks.Controller
 
         private void timer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
         {
-            timerDelayCheckUpdate.Interval = 1000.0 * 60 * 60 * 1;// 1 hours
+            timerDelayCheckUpdate.Interval = 1000.0 * 60 * 60 * 1;// 1 hour
 
-            var cfg = controller.GetCurrentConfiguration();
+            var cfg = Global.GuiConfig;
             if (cfg.AutoCheckUpdate)
             {
                 updateChecker.Check(cfg, false);
             }
 
-            updateSubscribeManager.CreateTask(cfg, _updateNodeChecker, false);
+            Global.UpdateSubscribeManager.CreateTask(cfg, Global.UpdateNodeChecker, false);
         }
 
         private static void ControllerError(object sender, ErrorEventArgs e)
@@ -147,10 +147,10 @@ namespace Shadowsocks.Controller
 
         private void UpdateTrayIcon()
         {
-            var config = controller.GetCurrentConfiguration();
-            var enabled = config.sysProxyMode != ProxyMode.NoModify && config.sysProxyMode != ProxyMode.Direct;
-            var global = config.sysProxyMode == ProxyMode.Global;
-            var random = config.random;
+            var config = Global.GuiConfig;
+            var enabled = config.SysProxyMode != ProxyMode.NoModify && config.SysProxyMode != ProxyMode.Direct;
+            var global = config.SysProxyMode == ProxyMode.Global;
+            var random = config.Random;
 
             var colorMask = ViewUtils.SelectColorMask(enabled, global);
             var icon = ViewUtils.ChangeBitmapColor(Resources.ss128, colorMask, random);
@@ -169,23 +169,23 @@ namespace Shadowsocks.Controller
             var line4 = string.Empty;
             if (random)
             {
-                strServer = $@"{I18NUtil.GetAppStringValue(@"LoadBalance")}{I18NUtil.GetAppStringValue(@"Colon")}{I18NUtil.GetAppStringValue(config.balanceAlgorithm)}";
-                if (config.randomInGroup)
+                strServer = $@"{I18NUtil.GetAppStringValue(@"LoadBalance")}{I18NUtil.GetAppStringValue(@"Colon")}{I18NUtil.GetAppStringValue(config.BalanceType.ToString())}";
+                if (config.RandomInGroup)
                 {
                     line3 = $@"{I18NUtil.GetAppStringValue(@"BalanceInGroup")}{Environment.NewLine}";
                 }
 
-                if (config.autoBan)
+                if (config.AutoBan)
                 {
                     line4 = $@"{I18NUtil.GetAppStringValue(@"AutoBan")}{Environment.NewLine}";
                 }
             }
             else
             {
-                if (config.index >= 0 && config.index < config.configs.Count)
+                if (config.Index >= 0 && config.Index < config.Configs.Count)
                 {
-                    var groupName = config.configs[config.index].Group;
-                    var serverName = config.configs[config.index].Remarks;
+                    var groupName = config.Configs[config.Index].Group;
+                    var serverName = config.Configs[config.Index].Remarks;
                     if (string.IsNullOrWhiteSpace(groupName))
                     {
                         strServer = string.IsNullOrWhiteSpace(serverName) ? null : serverName;
@@ -202,7 +202,7 @@ namespace Shadowsocks.Controller
             }
 
             string line1;
-            switch (config.sysProxyMode)
+            switch (config.SysProxyMode)
             {
                 case ProxyMode.NoModify:
                 {
@@ -231,23 +231,10 @@ namespace Shadowsocks.Controller
                 }
             }
             var line2 = string.IsNullOrWhiteSpace(strServer) ? null : $@"{strServer}{Environment.NewLine}";
-            var line5 = string.Format(I18NUtil.GetAppStringValue(@"RunningPort"), config.localPort); // this feedback is very important because they need to know Shadowsocks is running
+            var line5 = string.Format(I18NUtil.GetAppStringValue(@"RunningPort"), config.LocalPort); // this feedback is very important because they need to know Shadowsocks is running
 
             var text = $@"{line1}{line2}{line3}{line4}{line5}";
             _notifyIcon.ToolTipText = text;
-        }
-
-        private static MenuItem CreateMenuGroup(string text, IEnumerable items)
-        {
-            var t = new MenuItem
-            {
-                Header = text
-            };
-            foreach (var item in items)
-            {
-                t.Items.Add(item);
-            }
-            return t;
         }
 
         private void LoadMenu()
@@ -280,15 +267,19 @@ namespace Shadowsocks.Controller
                         {
                             var pacMenuItem = (MenuItem)menuItem.Items[0];
                             var proxyMenuItem = (MenuItem)menuItem.Items[1];
+                            ((MenuItem)menuItem.Items[3]).Click += CopyPacUrlItem_Click;
+                            ((MenuItem)menuItem.Items[4]).Click += EditPACFileItem_Click;
+                            ((MenuItem)menuItem.Items[5]).Click += EditUserRuleFileForGFWListItem_Click;
 
                             ((MenuItem)pacMenuItem.Items[0]).Click += UpdatePACFromLanIPListItem_Click;
+
                             ((MenuItem)pacMenuItem.Items[2]).Click += UpdatePACFromCNWhiteListItem_Click;
-                            ((MenuItem)pacMenuItem.Items[3]).Click += UpdatePACFromCNIPListItem_Click;
-                            ((MenuItem)pacMenuItem.Items[4]).Click += UpdatePACFromGFWListItem_Click;
-                            ((MenuItem)pacMenuItem.Items[6]).Click += UpdatePACFromCNOnlyListItem_Click;
-                            ((MenuItem)pacMenuItem.Items[8]).Click += CopyPacUrlItem_Click;
-                            ((MenuItem)pacMenuItem.Items[9]).Click += EditPACFileItem_Click;
-                            ((MenuItem)pacMenuItem.Items[10]).Click += EditUserRuleFileForGFWListItem_Click;
+                            ((MenuItem)pacMenuItem.Items[3]).Click += UpdatePACFromCnWhiteListIpItem_Click;
+                            ((MenuItem)pacMenuItem.Items[4]).Click += UpdatePACFromChnIpItem_Click;
+                            ((MenuItem)pacMenuItem.Items[5]).Click += UpdatePACFromGFWListItem_Click;
+
+                            ((MenuItem)pacMenuItem.Items[7]).Click += UpdatePACFromCNOnlyListItem_Click;
+                            ((MenuItem)pacMenuItem.Items[8]).Click += UpdatePACFromCNOnlyListFireFoxItem_Click;
 
                             ruleBypassLan = (MenuItem)proxyMenuItem.Items[0];
                             ruleBypassChina = (MenuItem)proxyMenuItem.Items[1];
@@ -331,24 +322,23 @@ namespace Shadowsocks.Controller
                             menuItem.Click += ShowLogItem_Click;
                             break;
                         }
-                        case @"UpdateAvailable":
-                        {
-                            UpdateItem = menuItem;
-                            UpdateItem.Click += UpdateItem_Clicked;
-                            break;
-                        }
                         case @"More":
                         {
-                            ((MenuItem)menuItem.Items[0]).Click += Setting_Click;
-                            ((MenuItem)menuItem.Items[1]).Click += ShowPortMapItem_Click;
-                            ((MenuItem)menuItem.Items[2]).Click += ShowUrlFromQrCode;
-                            ((MenuItem)menuItem.Items[4]).Click += OpenWiki_Click;
-                            ((MenuItem)menuItem.Items[5]).Click += FeedbackItem_Click;
+                            _moreMenu = menuItem;
+                            ((MenuItem)_moreMenu.Items[0]).Click += Setting_Click;
+                            ((MenuItem)_moreMenu.Items[1]).Click += DnsSetting_Click;
+                            ((MenuItem)_moreMenu.Items[2]).Click += ShowPortMapItem_Click;
+                            ((MenuItem)_moreMenu.Items[3]).Click += ShowUrlFromQrCode;
+                            ((MenuItem)_moreMenu.Items[5]).Click += OpenWiki_Click;
+                            ((MenuItem)_moreMenu.Items[6]).Click += FeedbackItem_Click;
 
-                            var updateMenu = (MenuItem)menuItem.Items[7];
-                            ((MenuItem)updateMenu.Items[0]).Click += CheckUpdate_Click;
-                            AutoCheckUpdateItem = (MenuItem)updateMenu.Items[2];
-                            AllowPreReleaseItem = (MenuItem)updateMenu.Items[3];
+                            _updateMenu = (MenuItem)_moreMenu.Items[8];
+
+                            ((MenuItem)_updateMenu.Items[0]).Click += CheckUpdate_Click;
+                            UpdateItem = (MenuItem)_updateMenu.Items[1];
+                            AutoCheckUpdateItem = (MenuItem)_updateMenu.Items[3];
+                            AllowPreReleaseItem = (MenuItem)_updateMenu.Items[4];
+                            UpdateItem.Click += UpdateItem_Clicked;
                             AutoCheckUpdateItem.Click += AutoCheckUpdateItem_Click;
                             AllowPreReleaseItem.Click += AllowPreRelease_Click;
                             break;
@@ -374,19 +364,7 @@ namespace Shadowsocks.Controller
             UpdateTrayIcon();
         }
 
-        private void controller_ToggleModeChanged(object sender, EventArgs e)
-        {
-            var config = controller.GetCurrentConfiguration();
-            UpdateSysProxyMode(config);
-        }
-
-        private void controller_ToggleRuleModeChanged(object sender, EventArgs e)
-        {
-            var config = controller.GetCurrentConfiguration();
-            UpdateProxyRule(config);
-        }
-
-        private void controller_FileReadyToOpen(object sender, ShadowsocksController.PathEventArgs e)
+        private void controller_FileReadyToOpen(object sender, MainController.PathEventArgs e)
         {
             Utils.OpenURL(e.Path);
         }
@@ -397,18 +375,12 @@ namespace Shadowsocks.Controller
             Logging.LogUsefulException(e.GetException());
         }
 
-        private void controller_UpdatePACFromGFWListCompleted(object sender, GFWListUpdater.ResultEventArgs e)
+        private void controller_UpdatePACFromGFWListCompleted(object sender, GfwListUpdater.ResultEventArgs e)
         {
-            var updater = (GFWListUpdater)sender;
             var result = e.Success ?
-                updater.UpdateType < 1 ? I18NUtil.GetAppStringValue(@"GfwListPacUpdated") : I18NUtil.GetAppStringValue(@"PacUpdated")
+                    e.PacType == PacType.GfwList ?
+                    I18NUtil.GetAppStringValue(@"GfwListPacUpdated") : I18NUtil.GetAppStringValue(@"PacUpdated")
                 : I18NUtil.GetAppStringValue(@"GfwListPacNotFound");
-            _notifyIcon.ShowBalloonTip(UpdateChecker.Name, result, BalloonIcon.Info);
-        }
-
-        private void controller_UpdatePACFromChnDomainsAndIPCompleted(object sender, ChnDomainsAndIPUpdater.ResultEventArgs e)
-        {
-            var result = e.Success ? I18NUtil.GetAppStringValue(@"PacUpdated") : I18NUtil.GetAppStringValue(@"PacNotFound");
             _notifyIcon.ShowBalloonTip(UpdateChecker.Name, result, BalloonIcon.Info);
         }
 
@@ -421,27 +393,27 @@ namespace Shadowsocks.Controller
             }
             string lastGroup = null;
             var count = 0;
-            if (!string.IsNullOrWhiteSpace(_updateNodeChecker.FreeNodeResult))
+            if (!string.IsNullOrWhiteSpace(Global.UpdateNodeChecker.FreeNodeResult))
             {
                 var urls = new List<string>();
-                _updateNodeChecker.FreeNodeResult = _updateNodeChecker.FreeNodeResult.TrimEnd('\r', '\n', ' ');
-                var config = controller.GetCurrentConfiguration();
-                var selectedServer = config.configs.ElementAtOrDefault(config.index);
+                Global.UpdateNodeChecker.FreeNodeResult = Global.UpdateNodeChecker.FreeNodeResult.TrimEnd('\r', '\n', ' ');
+                var config = Global.GuiConfig;
+                var selectedServer = config.Configs.ElementAtOrDefault(config.Index);
                 try
                 {
-                    _updateNodeChecker.FreeNodeResult = Base64.DecodeBase64(_updateNodeChecker.FreeNodeResult);
+                    Global.UpdateNodeChecker.FreeNodeResult = Base64.DecodeBase64(Global.UpdateNodeChecker.FreeNodeResult);
                 }
                 catch
                 {
-                    _updateNodeChecker.FreeNodeResult = string.Empty;
+                    Global.UpdateNodeChecker.FreeNodeResult = string.Empty;
                 }
-                Utils.URL_Split(_updateNodeChecker.FreeNodeResult, ref urls);
+                Utils.URL_Split(Global.UpdateNodeChecker.FreeNodeResult, ref urls);
                 urls.RemoveAll(url => !url.StartsWith(@"ssr://"));
                 if (urls.Count > 0)
                 {
                     urls.Reverse();
 
-                    lastGroup = updateSubscribeManager.CurrentServerSubscribe.OriginTag;
+                    lastGroup = Global.UpdateSubscribeManager.CurrentServerSubscribe.OriginTag;
                     if (string.IsNullOrEmpty(lastGroup))
                     {
                         foreach (var url in urls)
@@ -451,13 +423,13 @@ namespace Shadowsocks.Controller
                                 var server = new Server(url, null);
                                 if (!string.IsNullOrEmpty(server.Group))
                                 {
-                                    if (config.serverSubscribes.Any(subscribe => subscribe.Tag == server.Group))
+                                    if (config.ServerSubscribes.Any(subscribe => subscribe.Tag == server.Group))
                                     {
                                         continue;
                                     }
 
-                                    var serverSubscribe = config.serverSubscribes.Find(sub =>
-                                    sub.Url == updateSubscribeManager.CurrentServerSubscribe.Url
+                                    var serverSubscribe = config.ServerSubscribes.Find(sub =>
+                                    sub.Url == Global.UpdateSubscribeManager.CurrentServerSubscribe.Url
                                     && string.IsNullOrEmpty(sub.OriginTag));
 
                                     if (serverSubscribe != null)
@@ -476,13 +448,13 @@ namespace Shadowsocks.Controller
                     }
                     if (string.IsNullOrEmpty(lastGroup))
                     {
-                        lastGroup = updateSubscribeManager.CurrentServerSubscribe.UrlMd5;
+                        lastGroup = Global.UpdateSubscribeManager.CurrentServerSubscribe.UrlMd5;
                     }
 
                     //Find old servers
-                    var firstInsertIndex = config.configs.Count;
-                    var oldServers = config.configs.FindAll(server => server.SubTag == lastGroup);
-                    var index = config.configs.FindIndex(server => server.SubTag == lastGroup);
+                    var firstInsertIndex = config.Configs.Count;
+                    var oldServers = config.Configs.FindAll(server => server.SubTag == lastGroup);
+                    var index = config.Configs.FindIndex(server => server.SubTag == lastGroup);
                     if (index >= 0)
                     {
                         firstInsertIndex = index;
@@ -511,57 +483,54 @@ namespace Shadowsocks.Controller
                     //Remove servers
                     foreach (var server in removeServers)
                     {
-                        server.GetConnections().CloseAll();
-                        config.configs.Remove(server);
+                        server.Connections.CloseAll();
+                        config.Configs.Remove(server);
                     }
 
                     //Add servers
                     foreach (var server in addServers)
                     {
-                        if (server.Index > config.configs.Count)
+                        if (server.Index > config.Configs.Count)
                         {
-                            server.Index = config.configs.Count;
+                            server.Index = config.Configs.Count;
                         }
-                        config.configs.Insert(server.Index, server);
+                        config.Configs.Insert(server.Index, server);
                     }
 
-                    controller.SaveServersConfig(config);
-
                     //Set SelectedServer
-                    config = controller.GetCurrentConfiguration();
                     var selectedIndex = -1;
                     if (selectedServer != null)
                     {
-                        selectedIndex = config.configs.FindIndex(server =>
+                        selectedIndex = config.Configs.FindIndex(server =>
                           server.Id == selectedServer.Id
                           || server.SubTag == selectedServer.SubTag && server.IsMatchServer(selectedServer));
                     }
 
                     if (selectedServer == null || selectedIndex == -1)
                     {
-                        config.index = config.configs.Count - 1;
+                        config.Index = config.Configs.Count - 1;
                     }
                     else
                     {
-                        config.index = selectedIndex;
+                        config.Index = selectedIndex;
                     }
 
                     //If Update Success
                     if (count > 0)
                     {
-                        foreach (var serverSubscribe in config.serverSubscribes.Where(serverSubscribe => serverSubscribe.Url == _updateNodeChecker.SubscribeTask.Url))
+                        foreach (var serverSubscribe in config.ServerSubscribes.Where(serverSubscribe => serverSubscribe.Url == Global.UpdateNodeChecker.SubscribeTask.Url))
                         {
                             serverSubscribe.LastUpdateTime = (ulong)Math.Floor(DateTime.Now.Subtract(new DateTime(1970, 1, 1, 0, 0, 0)).TotalSeconds);
                         }
-                        config.configs.RemoveAll(server => server.IsMatchServer(Server.GetDefaultServer()));
+                        config.Configs.RemoveAll(server => server.IsMatchServer(new Server()));
                     }
-                    controller.SaveServersConfig(config);
+                    controller.SaveServersConfig(config, true);
                 }
             }
 
             if (count > 0)
             {
-                if (_updateNodeChecker.Notify)
+                if (Global.UpdateNodeChecker.Notify)
                 {
                     _notifyIcon.ShowBalloonTip(I18NUtil.GetAppStringValue(@"Success"), string.Format(I18NUtil.GetAppStringValue(@"UpdateSubscribeSuccess"), lastGroup), BalloonIcon.Info);
                 }
@@ -570,21 +539,21 @@ namespace Shadowsocks.Controller
             {
                 if (string.IsNullOrEmpty(lastGroup))
                 {
-                    lastGroup = _updateNodeChecker.SubscribeTask.Tag;
+                    lastGroup = Global.UpdateNodeChecker.SubscribeTask.Tag;
                 }
 
-                if (_updateNodeChecker.Notify)
+                if (Global.UpdateNodeChecker.Notify)
                 {
                     _notifyIcon.ShowBalloonTip(I18NUtil.GetAppStringValue(@"Error"), string.Format(I18NUtil.GetAppStringValue(@"UpdateSubscribeFailure"), lastGroup), BalloonIcon.Info);
                 }
             }
 
-            updateSubscribeManager.Next();
+            Global.UpdateSubscribeManager.Next();
         }
 
         private void updateChecker_NewVersionFound(object sender, EventArgs e)
         {
-            Application.Current.Dispatcher?.Invoke(() =>
+            Application.Current.Dispatcher?.InvokeAsync(() =>
             {
                 if (updateChecker.Found)
                 {
@@ -595,6 +564,8 @@ namespace Shadowsocks.Controller
                                 UpdateChecker.Name, updateChecker.LatestVersionNumber),
                                 I18NUtil.GetAppStringValue(@"ClickMenuToDownload"), BalloonIcon.Info);
                     }
+                    _moreMenu.Icon = CreateSelectedIcon();
+                    _updateMenu.Icon = CreateSelectedIcon();
                     UpdateItem.Visibility = Visibility.Visible;
                     UpdateItem.Header = string.Format(I18NUtil.GetAppStringValue(@"NewVersionAvailable"),
                             UpdateChecker.Name, updateChecker.LatestVersionNumber);
@@ -604,7 +575,9 @@ namespace Shadowsocks.Controller
 
         private void updateChecker_NewVersionNotFound(object sender, EventArgs e)
         {
-            _notifyIcon.ShowBalloonTip($@"{UpdateChecker.Name} {UpdateChecker.FullVersion}", I18NUtil.GetAppStringValue(@"NewVersionNotFound"), BalloonIcon.Info);
+            _notifyIcon.ShowBalloonTip($@"{UpdateChecker.Name} {UpdateChecker.FullVersion}",
+            $@"{I18NUtil.GetAppStringValue(@"NewVersionNotFound")}{Environment.NewLine}{UpdateChecker.Version}≥{updateChecker.LatestVersionNumber}",
+            BalloonIcon.Info);
         }
 
         private void UpdateChecker_NewVersionFoundFailed(object sender, EventArgs e)
@@ -615,6 +588,8 @@ namespace Shadowsocks.Controller
         private void UpdateItem_Clicked(object sender, RoutedEventArgs e)
         {
             Utils.OpenURL(updateChecker.LatestVersionUrl);
+            _moreMenu.Icon = null;
+            _updateMenu.Icon = null;
             UpdateItem.Visibility = Visibility.Collapsed;
             updateChecker.Found = false;
         }
@@ -630,126 +605,154 @@ namespace Shadowsocks.Controller
 
         private void UpdateSysProxyMode(Configuration config)
         {
-            noModifyItem.IsChecked = config.sysProxyMode == ProxyMode.NoModify;
-            enableItem.IsChecked = config.sysProxyMode == ProxyMode.Direct;
-            PACModeItem.IsChecked = config.sysProxyMode == ProxyMode.Pac;
-            globalModeItem.IsChecked = config.sysProxyMode == ProxyMode.Global;
+            noModifyItem.IsChecked = config.SysProxyMode == ProxyMode.NoModify;
+            enableItem.IsChecked = config.SysProxyMode == ProxyMode.Direct;
+            PACModeItem.IsChecked = config.SysProxyMode == ProxyMode.Pac;
+            globalModeItem.IsChecked = config.SysProxyMode == ProxyMode.Global;
         }
 
         private void UpdateProxyRule(Configuration config)
         {
-            ruleDisableBypass.IsChecked = config.proxyRuleMode == ProxyRuleMode.Disable;
-            ruleBypassLan.IsChecked = config.proxyRuleMode == ProxyRuleMode.BypassLan;
-            ruleBypassChina.IsChecked = config.proxyRuleMode == ProxyRuleMode.BypassLanAndChina;
-            ruleBypassNotChina.IsChecked = config.proxyRuleMode == ProxyRuleMode.BypassLanAndNotChina;
-            ruleUser.IsChecked = config.proxyRuleMode == ProxyRuleMode.UserCustom;
+            ruleDisableBypass.IsChecked = config.ProxyRuleMode == ProxyRuleMode.Disable;
+            ruleBypassLan.IsChecked = config.ProxyRuleMode == ProxyRuleMode.BypassLan;
+            ruleBypassChina.IsChecked = config.ProxyRuleMode == ProxyRuleMode.BypassLanAndChina;
+            ruleBypassNotChina.IsChecked = config.ProxyRuleMode == ProxyRuleMode.BypassLanAndNotChina;
+            ruleUser.IsChecked = config.ProxyRuleMode == ProxyRuleMode.UserCustom;
         }
 
         private void LoadCurrentConfiguration()
         {
-            var config = controller.GetCurrentConfiguration();
+            var config = Global.GuiConfig;
             UpdateServersMenu();
             UpdateSysProxyMode(config);
 
             UpdateProxyRule(config);
 
-            SelectRandomItem.IsChecked = config.random;
-            sameHostForSameTargetItem.IsChecked = config.sameHostForSameTarget;
+            SelectRandomItem.IsChecked = config.Random;
+            sameHostForSameTargetItem.IsChecked = config.SameHostForSameTarget;
             AutoCheckUpdateItem.IsChecked = config.AutoCheckUpdate;
-            AllowPreReleaseItem.IsChecked = config.isPreRelease;
+            AllowPreReleaseItem.IsChecked = config.IsPreRelease;
+        }
+
+        private static Grid CreateSelectedIcon()
+        {
+            var icon = new Grid();
+            icon.Children.Add(new Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                Fill = Brushes.Black
+            });
+            return icon;
         }
 
         private void UpdateServersMenu()
         {
-            //TODO:按订阅分组
             var items = ServersItem.Items;
             while (!Equals(items[0], SeparatorItem))
             {
                 items.RemoveAt(0);
             }
 
-            var configuration = controller.GetCurrentConfiguration();
-            var group = new SortedDictionary<string, MenuItem>();
-            const string defGroup = @"!(no group)";
-            var selectGroup = string.Empty;
-            for (var i = 0; i < configuration.configs.Count; i++)
+            var configuration = Global.GuiConfig;
+            for (var i = 0; i < configuration.Configs.Count;)
             {
-                var server = configuration.configs[i];
-                var groupName = string.IsNullOrEmpty(server.Group) ? defGroup : server.Group;
-
-                var item = new MenuItem
+                configuration.Configs[i].Index = ++i;
+            }
+            var sub = new List<MenuItem>();
+            var subTags = new HashSet<string>(configuration.Configs.Select(server => server.SubTag));
+            foreach (var subTag in subTags)
+            {
+                var isSelected = false;
+                var subItem = new MenuItem
                 {
-                    Header = server.FriendlyName,
-                    Tag = i
+                    Header = string.IsNullOrEmpty(subTag) ? I18NUtil.GetAppStringValue(@"EmptySubtag") : subTag
                 };
-                item.Click += AServerItem_Click;
-                if (configuration.index == i)
+                var servers = configuration.Configs.Where(server => server.SubTag == subTag).ToArray();
+                var groups = new HashSet<string>(servers.Select(server => server.Group));
+                foreach (var group in groups)
                 {
-                    item.IsChecked = true;
-                    selectGroup = groupName;
+                    var groupItem = new MenuItem
+                    {
+                        Header = string.IsNullOrEmpty(group) ? I18NUtil.GetAppStringValue(@"EmptyGroup") : group
+                    };
+                    var subServers = servers.Where(server => server.Group == group);
+                    foreach (var server in subServers)
+                    {
+                        var item = new MenuItem
+                        {
+                            Header = server.FriendlyName,
+                            Tag = server.Index - 1
+                        };
+                        item.Click += AServerItem_Click;
+                        if (configuration.Index == Convert.ToInt32(item.Tag))
+                        {
+                            item.IsChecked = true;
+                            isSelected = true;
+                        }
+                        groupItem.Items.Add(item);
+                    }
+                    if (groups.Count > 1)
+                    {
+                        subItem.Items.Add(groupItem);
+                        if (isSelected)
+                        {
+                            groupItem.Icon = CreateSelectedIcon();
+                            subItem.Icon = CreateSelectedIcon();
+                            isSelected = false;
+                        }
+                    }
+                    else
+                    {
+                        sub.Add(groupItem);
+                        if (isSelected)
+                        {
+                            groupItem.Icon = CreateSelectedIcon();
+                        }
+                    }
                 }
-
-                if (group.ContainsKey(groupName))
+                if (groups.Count > 1)
                 {
-                    group[groupName].Items.Add(item);
-                }
-                else
-                {
-                    group[groupName] = CreateMenuGroup(groupName, new[] { item });
+                    sub.Add(subItem);
                 }
             }
             var index = 0;
-            foreach (var pair in group)
+            foreach (var menuItem in sub)
             {
-                if (pair.Key == defGroup)
-                {
-                    pair.Value.Header = I18NUtil.GetAppStringValue(@"EmptyGroup");
-                }
-
-                if (pair.Key == selectGroup)
-                {
-                    pair.Value.Header = @"● " + pair.Value.Header;
-                }
-                else
-                {
-                    pair.Value.Header = @"　" + pair.Value.Header;
-                }
-
-                items.Insert(index, pair.Value);
-                ++index;
+                items.Insert(index++, menuItem);
             }
         }
 
         private void ShowConfigForm(bool addNode)
         {
-            if (_configWindow != null)
+            if (_serverConfigWindow != null)
             {
-                _configWindow.Activate();
-                _configWindow.UpdateLayout();
-                if (_configWindow.WindowState == WindowState.Minimized)
+                _serverConfigWindow.Activate();
+                _serverConfigWindow.UpdateLayout();
+                if (_serverConfigWindow.WindowState == WindowState.Minimized)
                 {
-                    _configWindow.WindowState = WindowState.Normal;
+                    _serverConfigWindow.WindowState = WindowState.Normal;
                 }
                 if (addNode)
                 {
-                    var cfg = controller.GetCurrentConfiguration();
-                    _configWindow.MoveToSelectedItem(cfg.index + 1);
+                    var cfg = Global.GuiConfig;
+                    _serverConfigWindow.MoveToSelectedItem(cfg.Index + 1);
                 }
             }
             else
             {
                 configFrom_open = true;
-                _configWindow = new ConfigWindow(controller, addNode ? -1 : -2);
-                _configWindow.Show();
-                _configWindow.Activate();
-                _configWindow.BringToFront();
-                _configWindow.Closed += ConfigWindow_Closed;
+                _serverConfigWindow = new ServerConfigWindow(controller, addNode ? -1 : -2);
+                _serverConfigWindow.Show();
+                _serverConfigWindow.Activate();
+                _serverConfigWindow.BringToFront();
+                _serverConfigWindow.Closed += ServerConfigWindowClosed;
             }
         }
 
-        private void ConfigWindow_Closed(object sender, EventArgs e)
+        private void ServerConfigWindowClosed(object sender, EventArgs e)
         {
-            _configWindow = null;
+            _serverConfigWindow = null;
             configFrom_open = false;
             Utils.ReleaseMemory();
             if (eventList.Count > 0)
@@ -765,25 +768,25 @@ namespace Shadowsocks.Controller
 
         private void ShowConfigForm(int index)
         {
-            if (_configWindow != null)
+            if (_serverConfigWindow != null)
             {
-                _configWindow.Activate();
-                _configWindow.UpdateLayout();
-                if (_configWindow.WindowState == WindowState.Minimized)
+                _serverConfigWindow.Activate();
+                _serverConfigWindow.UpdateLayout();
+                if (_serverConfigWindow.WindowState == WindowState.Minimized)
                 {
-                    _configWindow.WindowState = WindowState.Normal;
+                    _serverConfigWindow.WindowState = WindowState.Normal;
                 }
-                _configWindow.Topmost = true;
-                _configWindow.MoveToSelectedItem(index);
+                _serverConfigWindow.Topmost = true;
+                _serverConfigWindow.MoveToSelectedItem(index);
             }
             else
             {
                 configFrom_open = true;
-                _configWindow = new ConfigWindow(controller, index);
-                _configWindow.Show();
-                _configWindow.Activate();
-                _configWindow.Topmost = true;
-                _configWindow.Closed += ConfigWindow_Closed;
+                _serverConfigWindow = new ServerConfigWindow(controller, index);
+                _serverConfigWindow.Show();
+                _serverConfigWindow.Activate();
+                _serverConfigWindow.Topmost = true;
+                _serverConfigWindow.Closed += ServerConfigWindowClosed;
             }
         }
 
@@ -802,6 +805,26 @@ namespace Shadowsocks.Controller
                 _settingsWindow.Closed += (o, args) =>
                 {
                     _settingsWindow = null;
+                    Utils.ReleaseMemory();
+                };
+            }
+        }
+
+        private void ShowDnsSettingWindow()
+        {
+            if (_dnsSettingsWindow != null)
+            {
+                _dnsSettingsWindow.Activate();
+            }
+            else
+            {
+                _dnsSettingsWindow = new DnsSettingWindow();
+                _dnsSettingsWindow.Show();
+                _dnsSettingsWindow.Activate();
+                _dnsSettingsWindow.BringToFront();
+                _dnsSettingsWindow.Closed += (o, args) =>
+                {
+                    _dnsSettingsWindow = null;
                     Utils.ReleaseMemory();
                 };
             }
@@ -896,7 +919,7 @@ namespace Shadowsocks.Controller
             }
             else
             {
-                _subScribeWindow = new SubscribeWindow(controller, updateSubscribeManager, _updateNodeChecker);
+                _subScribeWindow = new SubscribeWindow(controller);
                 _subScribeWindow.Show();
                 _subScribeWindow.Activate();
                 _subScribeWindow.BringToFront();
@@ -936,7 +959,7 @@ namespace Shadowsocks.Controller
                 if (dlg.ShowDialog() == true)
                 {
                     var name = dlg.FileName;
-                    var cfg = Configuration.LoadFile(name);
+                    var cfg = Global.LoadFile(name);
                     if (cfg.IsDefaultConfig())
                     {
                         MessageBox.Show(I18NUtil.GetAppStringValue(@"ImportConfigFailed"), UpdateChecker.Name);
@@ -954,13 +977,18 @@ namespace Shadowsocks.Controller
             ShowSettingForm();
         }
 
+        private void DnsSetting_Click(object sender, RoutedEventArgs e)
+        {
+            ShowDnsSettingWindow();
+        }
+
         public void Quit_Click(object sender, EventArgs e)
         {
             controller.Stop();
-            if (_configWindow != null)
+            if (_serverConfigWindow != null)
             {
-                _configWindow.Close();
-                _configWindow = null;
+                _serverConfigWindow.Close();
+                _serverConfigWindow = null;
             }
             if (_serverLogWindow != null)
             {
@@ -1016,6 +1044,9 @@ namespace Shadowsocks.Controller
                     break;
                 case 4:
                     ShowPortMapForm();
+                    break;
+                case 6:
+                    ShowDnsSettingWindow();
                     break;
                 default:
                     ShowConfigForm(false);
@@ -1133,17 +1164,32 @@ namespace Shadowsocks.Controller
 
         private void UpdatePACFromCNWhiteListItem_Click(object sender, RoutedEventArgs e)
         {
-            controller.UpdatePACFromChnDomainsAndIP(ChnDomainsAndIPUpdater.Templates.ss_white);
+            //域名白名单
+            controller.UpdatePACFromOnlinePac(@"https://raw.githubusercontent.com/HMBSbige/Text_Translation/master/ShadowsocksR/ss_white.pac");
         }
 
         private void UpdatePACFromCNOnlyListItem_Click(object sender, RoutedEventArgs e)
         {
-            controller.UpdatePACFromChnDomainsAndIP(ChnDomainsAndIPUpdater.Templates.ss_white_r);
+            //回国
+            controller.UpdatePACFromOnlinePac(@"https://raw.githubusercontent.com/HMBSbige/Text_Translation/master/ShadowsocksR/ss_white_r.pac");
         }
 
-        private void UpdatePACFromCNIPListItem_Click(object sender, RoutedEventArgs e)
+        private void UpdatePACFromCNOnlyListFireFoxItem_Click(object sender, RoutedEventArgs e)
         {
-            controller.UpdatePACFromChnDomainsAndIP(ChnDomainsAndIPUpdater.Templates.ss_cnip);
+            //回国
+            controller.UpdatePACFromOnlinePac(@"https://raw.githubusercontent.com/HMBSbige/Text_Translation/master/ShadowsocksR/ss_white_r_Firefox.pac");
+        }
+
+        private void UpdatePACFromCnWhiteListIpItem_Click(object sender, RoutedEventArgs e)
+        {
+            //域名白名单+国内IP
+            controller.UpdatePACFromOnlinePac(@"https://raw.githubusercontent.com/HMBSbige/Text_Translation/master/ShadowsocksR/ss_cnall.pac");
+        }
+
+        private void UpdatePACFromChnIpItem_Click(object sender, RoutedEventArgs e)
+        {
+            //国内IP
+            controller.UpdatePACFromOnlinePac(@"https://raw.githubusercontent.com/HMBSbige/Text_Translation/master/ShadowsocksR/ss_cnip.pac");
         }
 
         private void EditUserRuleFileForGFWListItem_Click(object sender, RoutedEventArgs e)
@@ -1157,24 +1203,19 @@ namespace Shadowsocks.Controller
             var index = (int)item.Tag;
             Task.Run(() =>
             {
-                var config = controller.GetCurrentConfiguration();
-                Console.WriteLine($@"config.checkSwitchAutoCloseAll:{config.checkSwitchAutoCloseAll}");
-                if (config.checkSwitchAutoCloseAll)
-                {
-                    controller.DisconnectAllConnections();
-                }
+                controller.DisconnectAllConnections(true);
                 controller.SelectServerIndex(index);
             });
         }
 
         private void CheckUpdate_Click(object sender, RoutedEventArgs e)
         {
-            updateChecker.Check(controller.GetCurrentConfiguration(), true);
+            updateChecker.Check(Global.GuiConfig, true);
         }
 
         private void CheckNodeUpdate_Click(object sender, RoutedEventArgs e)
         {
-            updateSubscribeManager.CreateTask(controller.GetCurrentConfiguration(), _updateNodeChecker, true);
+            Global.UpdateSubscribeManager.CreateTask(Global.GuiConfig, Global.UpdateNodeChecker, true);
         }
 
         private void ShowLogItem_Click(object sender, RoutedEventArgs e)
@@ -1204,11 +1245,21 @@ namespace Shadowsocks.Controller
 
         public void ImportAddress(string text)
         {
+            ImportSsrUrl(text);
+
+            ImportSubUrl(text);
+        }
+
+        private void ImportSsrUrl(string text)
+        {
             if (controller.AddServerBySsUrl(text))
             {
                 ShowConfigForm(true);
             }
+        }
 
+        private void ImportSubUrl(string text)
+        {
             if (controller.AddSubscribeUrl(text))
             {
                 ShowSubscribeSettingForm();
@@ -1233,7 +1284,6 @@ namespace Shadowsocks.Controller
 
         #region QRCode
 
-        [SuppressMessage("ReSharper", "AccessToDisposedClosure")]
         private void ScanQRCodeItem_Click(object sender, RoutedEventArgs e)
         {
             Task.Run(() =>
@@ -1242,7 +1292,7 @@ namespace Shadowsocks.Controller
                 var h = (int)SystemParameters.VirtualScreenHeight;
                 var x = (int)SystemParameters.VirtualScreenLeft;
                 var y = (int)SystemParameters.VirtualScreenTop;
-                using var fullImage = new Bitmap(w, h);
+                var fullImage = new Bitmap(w, h);
                 using (var g = Graphics.FromImage(fullImage))
                 {
                     g.CopyFromScreen(x, y,
@@ -1274,7 +1324,7 @@ namespace Shadowsocks.Controller
                     {
                         var success = controller.AddServerBySsUrl(result.Text);
                         var successSub = controller.AddSubscribeUrl(result.Text);
-                        Application.Current.Dispatcher?.Invoke(() =>
+                        Application.Current.Dispatcher?.InvokeAsync(() =>
                         {
                             var splash = new QRCodeSplashWindow();
                             if (successSub)
@@ -1316,6 +1366,7 @@ namespace Shadowsocks.Controller
                                     (int)maxY - (int)minY);
                             splash.Width = fullImage.Width;
                             splash.Height = fullImage.Height;
+                            fullImage.Dispose();
                             splash.Show();
                         });
                         return;
